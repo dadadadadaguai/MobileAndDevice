@@ -1,0 +1,12 @@
+pandas
+loguru
+bs4
+csv
+io
+tqdm
+concurrent
+requests
+asyncio
+urllib
+chardet
+queue
