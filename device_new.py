@@ -1,17 +1,13 @@
-
-import urllib.parse
-import csv
+# url='https://phonedb.net/index.php?m=device&s=list&filter=29'
+import logging
 import queue
+import urllib.parse
 from concurrent.futures import ThreadPoolExecutor
+
 import chardet
 import pandas as pd
 import requests
 from bs4 import BeautifulSoup
-
-
-# url='https://phonedb.net/index.php?m=device&s=list&filter=29'
-import logging
-
 from tqdm import tqdm
 
 # 配置日志
@@ -22,13 +18,13 @@ logging.basicConfig(
     filemode='a'
 )
 
-# 创建一个 logger 实例
 logger = logging.getLogger(__name__)
 
 # 添加控制台输出
 console_handler = logging.StreamHandler()
 console_handler.setLevel(logging.DEBUG)
-console_formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+console_formatter = logging.Formatter(
+    '%(asctime)s - %(levelname)s - %(message)s')
 console_handler.setFormatter(console_formatter)
 logger.addHandler(console_handler)
 
@@ -43,31 +39,34 @@ def search_url(url):
     return soup_all
 
 
-def detect_encoding(file_path):
+def detect_encoding(file_path: str):
     with open(file_path, 'rb') as f:
         result = chardet.detect(f.read())
     return result['encoding']
 
-def insert_csv(value, results, file_path='device_new.csv'):
-    # 检测文件编码
-    encoding = detect_encoding(file_path)
 
-    # 读取 CSV 文件
-    with open(file_path, mode='r', newline='', encoding=encoding) as csvfile:
-        reader = csv.DictReader(csvfile)
-        rows = list(reader)
+# def insert_csv(value, results, file_path='device_new.csv'):
+#     # 检测文件编码
+#     encoding = detect_encoding(file_path)
+#
+#     # 读取 CSV 文件
+#     with open(file_path, mode='r', newline='', encoding=encoding) as csvfile:
+#         reader = csv.DictReader(csvfile)
+#         rows = list(reader)
+#
+#     # 更新符合条件的行
+#     for row in rows:
+#         if row['tt.term_mdl_code'] == value:
+#             row['name'] = results
+#
+#     # 将更新后的数据写回 CSV 文件
+#     with open(file_path, mode='w', newline='', encoding=encoding) as csvfile:
+#         fieldnames = rows[0].keys()
+#         writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+#         writer.writeheader()
+#         writer.writerows(rows)
 
-    # 更新符合条件的行
-    for row in rows:
-        if row['tt.term_mdl_code'] == value:
-            row['name'] = results
 
-    # 将更新后的数据写回 CSV 文件
-    with open(file_path, mode='w', newline='', encoding=encoding) as csvfile:
-        fieldnames = rows[0].keys()
-        writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
-        writer.writeheader()
-        writer.writerows(rows)
 # 解析搜索结果
 def parse_search_results(soup):
     # 示搜索结果在 <div class="search-result"> <a title=***>中
@@ -77,17 +76,23 @@ def parse_search_results(soup):
         search_results.append(title)
     return search_results
 
+
 # 读取页码
 def get_page_url(soup):
     base_url = 'https://phonedb.net/'
     # 筛选出 title 属性包含 "Jump to page" 的 a 标签
-    jump_to_page_links = soup.find_all('a', {'title': lambda x: 'Jump to page' in x if x else False})
+    jump_to_page_links = soup.find_all(
+        'a', {'title': lambda x: 'Jump to page' in x if x else False})
 
-    full_page_hrefs = [urllib.parse.urljoin(base_url, link.get('href')) for link in jump_to_page_links]
+    full_page_hrefs = [
+        urllib.parse.urljoin(
+            base_url,
+            link.get('href')) for link in jump_to_page_links]
 
     return full_page_hrefs
 
-#获取name值
+
+# 获取name值
 def search_and_scrape(value) -> list:
     base_url = "https://phonedb.net/index.php?m=device&s=list"
     # 构造请求参数
@@ -123,11 +128,13 @@ def search_and_scrape(value) -> list:
 #        result = await loop.run_in_executor(executor, search_and_scrape, term_mdl_code)
 #        results.extend(result)
 #        task_queue.task_done()
-#异步读取csv文件
+# 异步读取csv文件
 def read_csv(file_path):
-    df = pd.read_csv(file_path,encoding='GBK')
+    df = pd.read_csv(file_path, encoding='GBK')
     return df
-#name列表
+
+
+# name列表
 def worker(task_queue, results_dict):
     while True:
         term_mdl_code = task_queue.get()
@@ -136,6 +143,7 @@ def worker(task_queue, results_dict):
         result = search_and_scrape(term_mdl_code)
         results_dict[term_mdl_code] = result
         task_queue.task_done()
+
 
 def process_data(file_path, output_file_path):
     # 读取 CSV 文件
@@ -150,7 +158,11 @@ def process_data(file_path, output_file_path):
     num_workers = 10
     with ThreadPoolExecutor(max_workers=num_workers) as executor:
         # 创建工作者任务
-        workers = [executor.submit(worker, task_queue, results_dict) for _ in range(num_workers)]
+        workers = [
+            executor.submit(
+                worker,
+                task_queue,
+                results_dict) for _ in range(num_workers)]
         # 显示进度条
         with tqdm(total=len(term_mdl_codes), desc="Processing") as pbar:
             # 等待所有任务完成
@@ -163,10 +175,14 @@ def process_data(file_path, output_file_path):
             # 将字典转换为 DataFrame 列
     df['name'] = df['tt.term_mdl_code'].map(results_dict).fillna('')
     write_csv(df, output_file_path)
-#写入结果
+
+
+# 写入结果
 def write_csv(df, output_file_path):
     df.to_csv(output_file_path, index=False, encoding='gbk')
     logger.info(f"Results written to {output_file_path}")
+
+
 #
 # async def main():
 #     # 并发执行 process_data
@@ -177,5 +193,5 @@ def write_csv(df, output_file_path):
 if __name__ == '__main__':
     # search_values = ['SM-N9760', 'PHA120', 'OPPO A207']
     file_path = 'device_test.csv'
-    output_file_path = 'device_output_test_new4.csv'
-    process_data(file_path,output_file_path)
+    output_file_path = 'device_test_output.csv'
+    process_data(file_path, output_file_path)
